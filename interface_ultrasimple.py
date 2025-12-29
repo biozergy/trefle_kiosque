@@ -4,10 +4,16 @@ Version qui CHARGERA votre script à coup sûr
 """
 
 import os
+import sys
 
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtGui
+
+# Ajouter le répertoire courant au path pour importer config et retrofits
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
 
 # Importer config et retrofits pour les presets et options modulaires
 try:
@@ -20,18 +26,18 @@ try:
 
     CONFIG_AVAILABLE = True
     print("✅ config.py chargé")
-except ImportError:
+except ImportError as e:
     CONFIG_AVAILABLE = False
-    print("⚠️  config.py non disponible - fonctionnalités présets désactivées")
+    print(f"⚠️  config.py non disponible - fonctionnalités présets désactivées ({e})")
 
 try:
     from retrofits import RetrofitManager  # noqa: F401
 
     RETROFITS_AVAILABLE = True
     print("✅ retrofits.py chargé")
-except ImportError:
+except ImportError as e:
     RETROFITS_AVAILABLE = False
-    print("⚠️  retrofits.py non disponible - options modulaires désactivées")
+    print(f"⚠️  retrofits.py non disponible - options modulaires désactivées ({e})")
 
 print("\n" + "=" * 60)
 print("🏗️ INTERFACE ULTRA SIMPLE - CHARGEMENT GARANTI")
@@ -47,6 +53,8 @@ class InterfaceUltraSimple(QtGui.QDialog):
         self.selected_retrofits = {}  # {nom_retrofit: bool}
         self.secondary_params = {}  # Paramètres calculés (anneau, montants, etc.)
         self.cost_estimate = {}  # Estimation coût
+        self.functions_map = {}  # {nom_fonction: callable}
+        self.classes_map = {}  # {nom_classe: class}
 
         # CHEMIN EXPLICITE - MODIFIEZ ICI !!!
         if chemin_script is None:
@@ -107,9 +115,12 @@ class InterfaceUltraSimple(QtGui.QDialog):
                 print(f"✅ Module chargé: {getattr(module, '__name__', '<module>')}")
             except Exception as e:
                 print(f"❌ Erreur import module: {e}")
+                import traceback
+
+                traceback.print_exc()
                 return []
 
-            # Récupérer les fonctions définies DANS le module
+            # Chercher CLASSES ET FONCTIONS (pas juste fonctions)
             # Exclure les helpers attachés à InterfaceUltraSimple
             excluded = {
                 "generer_avec_parametres",
@@ -117,42 +128,60 @@ class InterfaceUltraSimple(QtGui.QDialog):
                 "choisir_script",
                 "_append_log",
             }
+
+            # 1. Chercher les CLASSES avec "Kiosque" dans le nom
+            classes_trouvees = [
+                name
+                for name, obj in inspect.getmembers(module, inspect.isclass)
+                if getattr(obj, "__module__", "") == module.__name__
+                and "kiosque" in name.lower()
+            ]
+            print(f"🔍 Classes trouvées: {len(classes_trouvees)}")
+            for name in classes_trouvees:
+                print(f"   • {name}")
+
+            # 2. Chercher les FONCTIONS
             fonctions_trouvees = [
                 name
                 for name, obj in inspect.getmembers(module, inspect.isfunction)
                 if getattr(obj, "__module__", "") == module.__name__
                 and name not in excluded
             ]
-            print(f"📋 Fonctions trouvées dans le module: {len(fonctions_trouvees)}")
-
-            # Chercher les fonctions principales par mot-clé
-            fonctions_importantes = []
-            for f in fonctions_trouvees:
-                if any(
-                    mot in f.lower() for mot in ["kiosque", "creer", "generer", "plot"]
-                ):
-                    fonctions_importantes.append(f)
-                    print(f"   • {f}")
+            print(f"📋 Fonctions trouvées: {len(fonctions_trouvees)}")
+            for name in fonctions_trouvees:
+                print(f"   • {name}")
 
             # Construire la map nom->callable pour l'interface
-            fonctions_disponibles = []
             self.functions_map = {}
+            self.classes_map = {}
+
+            # Ajouter les classes
+            for name in classes_trouvees:
+                obj = getattr(module, name, None)
+                if obj is not None:
+                    self.classes_map[name] = obj
+                    print(f"✅ Classe disponible: {name}")
+
+            # Ajouter les fonctions
             for name in fonctions_trouvees:
                 obj = getattr(module, name, None)
                 if callable(obj):
                     self.functions_map[name] = obj
-                    if name in fonctions_importantes:
-                        fonctions_disponibles.append(name)
-                        print(f"✅ Fonction disponible: {name}")
+                    print(f"✅ Fonction disponible: {name}")
 
-            # Si aucune fonction importante trouvée, retourner toutes les fonctions
+            # Retourner tout ce qui a été trouvé
+            fonctions_disponibles = list(self.functions_map.keys()) + list(
+                self.classes_map.keys()
+            )
             if not fonctions_disponibles:
-                fonctions_disponibles = list(self.functions_map.keys())
-
+                print("⚠️  Aucune classe ou fonction compatible trouvée!")
             return fonctions_disponibles
 
         except Exception as e:
             print(f"❌ Erreur chargement: {str(e)}")
+            import traceback
+
+            traceback.print_exc()
             return []
 
     def setup_ui(self):
@@ -338,17 +367,20 @@ class InterfaceUltraSimple(QtGui.QDialog):
 
         # Boutons spécifiques
         frame_boutons = QtGui.QFrame()
+        frame_boutons.setMinimumHeight(60)
         layout_boutons_spec = QtGui.QHBoxLayout()
         layout_boutons_spec.setSpacing(10)  # Add spacing between buttons
 
         self.btn_standard = QtGui.QPushButton("🏗️ Standard")
-        self.btn_standard.setMinimumHeight(40)  # Ensure readable button height
+        self.btn_standard.setMinimumHeight(45)
+        self.btn_standard.setMinimumWidth(150)
         self.btn_standard.clicked.connect(self.generer_standard)
         self.btn_standard.setEnabled(bool(self.fonctions_chargees))
         layout_boutons_spec.addWidget(self.btn_standard)
 
         self.btn_plots = QtGui.QPushButton("🏗️ Avec Plots")
-        self.btn_plots.setMinimumHeight(40)  # Ensure readable button height
+        self.btn_plots.setMinimumHeight(45)
+        self.btn_plots.setMinimumWidth(150)
         self.btn_plots.clicked.connect(self.generer_plots)
         self.btn_plots.setEnabled(bool(self.fonctions_chargees))
         layout_boutons_spec.addWidget(self.btn_plots)
@@ -458,22 +490,45 @@ class InterfaceUltraSimple(QtGui.QDialog):
         self.setLayout(main_layout)
 
     def montrer_fonctions(self):
-        """Montre toutes les fonctions disponibles"""
-        # Utiliser la map de fonctions du module si présente
+        """Montre toutes les classes et fonctions disponibles"""
+        msg = ""
+
+        # Afficher les classes
+        if hasattr(self, "classes_map") and self.classes_map:
+            toutes_classes = sorted(self.classes_map.keys())
+            msg += f"Classes disponibles ({len(toutes_classes)}):\n"
+            msg += "\n".join(f"  - {c}" for c in toutes_classes)
+            msg += "\n\n"
+
+        # Afficher les fonctions
         if hasattr(self, "functions_map") and self.functions_map:
             toutes_fonctions = sorted(self.functions_map.keys())
+            msg += f"Fonctions disponibles ({len(toutes_fonctions)}):\n"
+            msg += "\n".join(f"  - {f}" for f in toutes_fonctions)
         else:
-            toutes_fonctions = []
-        msg = f"Fonctions disponibles ({len(toutes_fonctions)}):\n\n"
-        msg += "\n".join(toutes_fonctions[:100])
-        QtGui.QMessageBox.information(self, "Toutes les fonctions", msg)
+            msg += "Aucune fonction disponible"
+
+        if msg:
+            QtGui.QMessageBox.information(self, "Classes et Fonctions", msg)
+        else:
+            QtGui.QMessageBox.warning(
+                self, "Rien trouvé", "Aucune classe ou fonction disponible."
+            )
 
     def generer_magique(self):
-        """Essaie TOUTES les fonctions jusqu'à ce qu'une marche"""
+        """Essaie TOUTES les classes et fonctions jusqu'à ce qu'une marche"""
         try:
-            self.label_message.setText("🔍 Recherche d'une fonction qui marche...")
+            self.label_message.setText(
+                "🔍 Recherche d'une classe ou fonction qui marche..."
+            )
 
-            # Chercher toutes les fonctions qui pourraient créer un kiosque
+            # 1. Essayer les CLASSES d'abord (plus probables)
+            classes_a_tester = []
+            if hasattr(self, "classes_map") and self.classes_map:
+                for nom in self.classes_map.keys():
+                    classes_a_tester.append(nom)
+
+            # 2. Essayer les FONCTIONS (si classes ne marchent pas)
             fonctions_a_tester = []
             if hasattr(self, "functions_map") and self.functions_map:
                 for nom in self.functions_map.keys():
@@ -481,31 +536,66 @@ class InterfaceUltraSimple(QtGui.QDialog):
                         mot in nom.lower() for mot in ["kiosque", "creer", "generer"]
                     ):
                         fonctions_a_tester.append(nom)
-            else:
-                # Fallback: aucune fonction chargée
-                fonctions_a_tester = []
 
-            print(f"🔧 {len(fonctions_a_tester)} fonctions à tester")
+            print(
+                f"🔧 {len(classes_a_tester)} classes et {len(fonctions_a_tester)} fonctions à tester"
+            )
 
-            if not fonctions_a_tester:
-                QtGui.QMessageBox.warning(
-                    self, "Aucune fonction", "Je n'ai trouvé aucune fonction à tester."
-                )
-                return
+            # Tester les classes d'abord
+            for nom_classe in classes_a_tester:
+                try:
+                    print(f"🧪 Test de classe: {nom_classe}")
+                    doc_name = f"Test_{nom_classe}"
+                    App.newDocument(doc_name)
 
-            # Tester chaque fonction
+                    classe = self.classes_map.get(nom_classe)
+                    if classe is None:
+                        raise RuntimeError(f"Classe {nom_classe} introuvable")
+
+                    # Instancier et appeler generer_kiosque_complet_avec_plots
+                    instance = classe()
+                    if hasattr(instance, "generer_kiosque_complet_avec_plots"):
+                        hauteur = (
+                            int(self.controles.get("hauteur_dome").value())
+                            if "hauteur_dome" in self.controles
+                            else 3500
+                        )
+                        instance.config["hauteur_dome"] = hauteur
+                        instance.generer_kiosque_complet_avec_plots()
+                    elif hasattr(instance, "generer_kiosque"):
+                        instance.generer_kiosque()
+                    else:
+                        raise RuntimeError(
+                            f"Classe {nom_classe} n'a pas de méthode generer_kiosque"
+                        )
+
+                    print(f"✅ SUCCÈS avec classe: {nom_classe}")
+
+                    # Zoom
+                    if hasattr(Gui, "ActiveDocument") and Gui.ActiveDocument:
+                        Gui.ActiveDocument.ActiveView.viewIsometric()
+                        Gui.ActiveDocument.ActiveView.fitAll()
+
+                    self.label_message.setText(f"✅ Réussi avec classe: {nom_classe}")
+                    self._append_log(f"✅ Génération réussie avec {nom_classe}")
+                    return
+
+                except Exception as e:
+                    print(f"❌ Échec classe {nom_classe}: {e}")
+                    continue
+
+            # Tester les fonctions ensuite
             for nom_fonction in fonctions_a_tester:
                 try:
-                    print(f"🧪 Test de: {nom_fonction}")
-                    # Créer un nouveau document
+                    print(f"🧪 Test de fonction: {nom_fonction}")
                     doc_name = f"Test_{nom_fonction}"
                     App.newDocument(doc_name)
-                    # Appel de la fonction en tenant compte de la hauteur du dôme
+
                     func = self.functions_map.get(nom_fonction)
                     if func is None:
                         raise RuntimeError("Fonction introuvable dans le module chargé")
                     self._call_with_dome_height(func, nom_fonction)
-                    print(f"✅ SUCCÈS avec: {nom_fonction}")
+                    print(f"✅ SUCCÈS avec fonction: {nom_fonction}")
 
                     # Zoom
                     if hasattr(Gui, "ActiveDocument") and Gui.ActiveDocument:
@@ -513,33 +603,22 @@ class InterfaceUltraSimple(QtGui.QDialog):
                         Gui.ActiveDocument.ActiveView.fitAll()
 
                     self.label_message.setText(f"✅ Réussi avec: {nom_fonction}")
-
-                    QtGui.QMessageBox.information(
-                        self,
-                        "Succès !",
-                        f"Kiosque généré avec la fonction:\n'{nom_fonction}'\n\n"
-                        f"Regardez dans la vue 3D !",
-                    )
-
-                    return  # Sortir après le premier succès
+                    self._append_log(f"✅ Génération réussie avec {nom_fonction}")
+                    return
 
                 except Exception as e:
-                    print(f"   ❌ {nom_fonction} a échoué: {e}")
-                    # Fermer le document d'essai
-                    try:
-                        App.closeDocument(doc_name)
-                    except Exception:
-                        pass
+                    print(f"❌ Échec fonction {nom_fonction}: {e}")
                     continue
 
-            # Si aucune fonction n'a marché
-            self.label_message.setText("❌ Aucune fonction n'a fonctionné")
+            # Si on arrive ici, rien n'a marché
             QtGui.QMessageBox.warning(
                 self,
-                "Échec",
-                "J'ai testé toutes les fonctions mais aucune n'a réussi.\n"
-                "Votre script a peut-être une erreur.",
+                "Aucune classe ou fonction compatible",
+                "Aucune classe ou fonction n'a pu générer le kiosque.",
             )
+            self.label_message.setText("❌ Aucune classe ou fonction n'a fonctionné")
+            # Rien n'a fonctionné
+            # (Le message ci-dessus informe déjà l'utilisateur)
 
         except Exception as e:
             self.label_message.setText(f"❌ Erreur: {str(e)}")
@@ -547,13 +626,60 @@ class InterfaceUltraSimple(QtGui.QDialog):
             QtGui.QMessageBox.critical(self, "Erreur", f"Erreur:\n{str(e)}")
 
     def generer_standard(self):
-        """Essaie les fonctions standard"""
+        """Génère via la classe si disponible, sinon essaie fonctions standard."""
+        # Essayer classe d'abord
+        try:
+            if hasattr(self, "classes_map") and self.classes_map:
+                # Prendre la première classe trouvée (ex: KiosqueTrefleFonctionnel)
+                nom_classe = sorted(self.classes_map.keys())[0]
+                classe = self.classes_map[nom_classe]
+                instance = classe()
+                # Appliquer hauteur dôme si présente
+                if "hauteur_dome" in getattr(self, "controles", {}):
+                    try:
+                        hd = int(self.controles["hauteur_dome"].value())
+                        instance.config["hauteur_dome"] = hd
+                    except Exception:
+                        pass
+                # Appeler la méthode standard
+                if hasattr(instance, "generer_kiosque"):
+                    App.newDocument("Kiosque_Standard")
+                    instance.generer_kiosque()
+                    return
+                if hasattr(instance, "assembler_4_petales"):
+                    App.newDocument("Kiosque_Standard")
+                    instance.assembler_4_petales()
+                    return
+        except Exception:
+            pass
+
+        # Sinon essayer les fonctions libres
         self.essayer_fonctions(
             ["creer_kiosque_fonctionnel", "creer_kiosque", "generer_kiosque"]
         )
 
     def generer_plots(self):
-        """Essaie les fonctions avec plots"""
+        """Génère via la classe avec plots si disponible, sinon fonctions."""
+        # Essayer classe d'abord
+        try:
+            if hasattr(self, "classes_map") and self.classes_map:
+                nom_classe = sorted(self.classes_map.keys())[0]
+                classe = self.classes_map[nom_classe]
+                instance = classe()
+                if "hauteur_dome" in getattr(self, "controles", {}):
+                    try:
+                        hd = int(self.controles["hauteur_dome"].value())
+                        instance.config["hauteur_dome"] = hd
+                    except Exception:
+                        pass
+                if hasattr(instance, "generer_kiosque_complet_avec_plots"):
+                    App.newDocument("Kiosque_Plots")
+                    instance.generer_kiosque_complet_avec_plots()
+                    return
+        except Exception:
+            pass
+
+        # Sinon essayer les fonctions libres
         self.essayer_fonctions(
             [
                 "creer_kiosque_avec_plots",
