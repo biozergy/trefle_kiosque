@@ -20,6 +20,7 @@ try:
     from config import (
         PRESETS,
         RETROFIT_OPTIONS,
+        SAFETY_LIMITS,
         calculate_secondary_params,
         estimate_costs,
     )
@@ -393,6 +394,18 @@ class InterfaceUltraSimple(QtGui.QDialog):
         self.btn_tester.clicked.connect(self.montrer_fonctions)
         layout_actions.addWidget(self.btn_tester)
 
+        # Export DXF/STEP pour fabricant
+        self.btn_export = QtGui.QPushButton("💾 Export DXF/STEP")
+        self.btn_export.setMinimumHeight(40)
+        self.btn_export.clicked.connect(self.export_manufacturer_files)
+        layout_actions.addWidget(self.btn_export)
+
+        # Vérification sécurité
+        self.btn_safety = QtGui.QPushButton("🛡️ Vérifier sécurité")
+        self.btn_safety.setMinimumHeight(40)
+        self.btn_safety.clicked.connect(self.validate_safety_and_warn)
+        layout_actions.addWidget(self.btn_safety)
+
         group_actions.setLayout(layout_actions)
         layout.addWidget(group_actions)
 
@@ -688,6 +701,163 @@ class InterfaceUltraSimple(QtGui.QDialog):
             ]
         )
 
+    def export_manufacturer_files(self):
+        """Exporte DXF (2D) et STEP (3D) du document actif dans un dossier EXPORTS."""
+        try:
+            doc = App.ActiveDocument
+            if doc is None:
+                QtGui.QMessageBox.warning(
+                    self,
+                    "Aucun document",
+                    "Aucun document actif. Générez le kiosque avant d'exporter.",
+                )
+                return
+
+            # Créer dossier EXPORTS/timestamp
+            import datetime
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            export_dir = os.path.join(_script_dir, "EXPORTS", timestamp)
+            dxf_dir = os.path.join(export_dir, "DXF")
+            step_dir = os.path.join(export_dir, "STEP")
+            os.makedirs(dxf_dir, exist_ok=True)
+            os.makedirs(step_dir, exist_ok=True)
+
+            # Récupérer objets exportables
+            objs = [o for o in doc.Objects if hasattr(o, "Shape")]
+            if not objs:
+                QtGui.QMessageBox.warning(
+                    self,
+                    "Rien à exporter",
+                    "Aucun objet avec forme trouvé dans le document.",
+                )
+                return
+
+            # Export DXF
+            dxf_path = os.path.join(dxf_dir, "kiosque.dxf")
+            try:
+                import ImportGui  # type: ignore
+
+                ImportGui.export(objs, dxf_path)
+                self._append_log(f"✓ DXF exporté: {dxf_path}")
+            except Exception as e:
+                self._append_log(f"❌ DXF non exporté: {e}")
+
+            # Export STEP
+            step_path = os.path.join(step_dir, "kiosque.step")
+            try:
+                from FreeCAD import Part  # type: ignore
+
+                Part.export(objs, step_path)
+                self._append_log(f"✓ STEP exporté: {step_path}")
+            except Exception as e:
+                self._append_log(f"❌ STEP non exporté: {e}")
+
+            # BOM simple
+            bom_path = os.path.join(export_dir, "BOM.txt")
+            try:
+                with open(bom_path, "w", encoding="utf-8") as f:
+                    f.write("Liste des objets exportés\n")
+                    f.write("==========================\n")
+                    for o in objs:
+                        f.write(f"- {o.Name} ({o.Label})\n")
+                self._append_log(f"✓ BOM créé: {bom_path}")
+            except Exception as e:
+                self._append_log(f"❌ BOM non créé: {e}")
+
+            QtGui.QMessageBox.information(
+                self,
+                "Export terminé",
+                f"Fichiers exportés dans:\n{export_dir}",
+            )
+        except Exception as e:
+            QtGui.QMessageBox.critical(self, "Export erreur", str(e))
+
+    def validate_safety_and_warn(self):
+        """Valide les paramètres secondaires contre SAFETY_LIMITS et avertit si hors limites."""
+        try:
+            if not CONFIG_AVAILABLE:
+                QtGui.QMessageBox.warning(
+                    self,
+                    "Config absente",
+                    "config.py introuvable; validation de sécurité indisponible.",
+                )
+                return
+
+            # Récupérer valeurs courantes
+            rayon = (
+                int(self.controles.get("rayon").value())
+                if "rayon" in self.controles
+                else 2200
+            )
+            hauteur = (
+                int(self.controles.get("haut").value())
+                if "haut" in self.controles
+                else 2200
+            )
+            espace = (
+                int(self.controles.get("espace").value())
+                if "espace" in self.controles
+                else 1000
+            )
+            hauteur_dome = (
+                int(self.controles.get("hauteur_dome").value())
+                if "hauteur_dome" in self.controles
+                else 3500
+            )
+            wind = (
+                int(self.controles.get("wind_speed").value())
+                if "wind_speed" in self.controles
+                else 100
+            )
+            material = (
+                self.controles.get("material").currentText()
+                if "material" in self.controles
+                else "Acier"
+            )
+            sf = (
+                float(self.controles.get("safety_factor").value())
+                if "safety_factor" in self.controles
+                else 1.25
+            )
+
+            sec = calculate_secondary_params(
+                rayon, hauteur, espace, hauteur_dome, material, wind, sf
+            )
+
+            warnings = []
+            # Vent
+            if wind > SAFETY_LIMITS.get("wind_speed_max", 150):
+                warnings.append(f"Vitesse vent {wind} km/h dépasse la limite autorisée")
+            # Tubes
+            td = sec.get("tube_diametre_mm", 0)
+            if td < SAFETY_LIMITS.get(
+                "tube_diametre_min", 40
+            ) or td > SAFETY_LIMITS.get("tube_diametre_max", 200):
+                warnings.append(f"Diamètre tube Ø{td} mm hors limites")
+            # Montants
+            nm = sec.get("n_montants", 0)
+            if nm < SAFETY_LIMITS.get("n_montants_min", 12) or nm > SAFETY_LIMITS.get(
+                "n_montants_max", 64
+            ):
+                warnings.append(f"Nombre de montants {nm} hors limites")
+            # Ancrage
+            ap = sec.get("ancrage_profondeur_mm", 0)
+            if ap < SAFETY_LIMITS.get("ancrage_profondeur_min", 300):
+                warnings.append(f"Profondeur d'ancrage {ap} mm insuffisante")
+
+            if warnings:
+                msg = "\n".join(f"• {w}" for w in warnings)
+                QtGui.QMessageBox.warning(self, "Avertissements sécurité", msg)
+                self._append_log(f"⚠️ Sécurité: \n{msg}")
+            else:
+                QtGui.QMessageBox.information(
+                    self, "Sécurité", "Paramètres dans les limites."
+                )
+                self._append_log("✓ Paramètres validés (sécurité)")
+        except Exception as e:
+            QtGui.QMessageBox.critical(self, "Validation erreur", str(e))
+
     def _call_with_dome_height(self, func, nom_fonction):
         """Appelle `func` en appliquant la valeur de `hauteur_dome` via la classe si possible.
 
@@ -948,6 +1118,11 @@ def _apply_preset(self, preset_name):
         self._append_log(
             f"✓ Preset '{preset_name}' appliqué - Params secondaires calculés"
         )
+        # Validation sécurité après calcul
+        try:
+            self.validate_safety_and_warn()
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"❌ Erreur apply_preset: {e}")
