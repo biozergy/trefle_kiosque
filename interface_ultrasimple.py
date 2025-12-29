@@ -9,6 +9,30 @@ import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtGui
 
+# Importer config et retrofits pour les presets et options modulaires
+try:
+    from config import (
+        PRESETS,
+        RETROFIT_OPTIONS,
+        calculate_secondary_params,
+        estimate_costs,
+    )
+
+    CONFIG_AVAILABLE = True
+    print("✅ config.py chargé")
+except ImportError:
+    CONFIG_AVAILABLE = False
+    print("⚠️  config.py non disponible - fonctionnalités présets désactivées")
+
+try:
+    from retrofits import RetrofitManager  # noqa: F401
+
+    RETROFITS_AVAILABLE = True
+    print("✅ retrofits.py chargé")
+except ImportError:
+    RETROFITS_AVAILABLE = False
+    print("⚠️  retrofits.py non disponible - options modulaires désactivées")
+
 print("\n" + "=" * 60)
 print("🏗️ INTERFACE ULTRA SIMPLE - CHARGEMENT GARANTI")
 print("=" * 60)
@@ -17,6 +41,12 @@ print("=" * 60)
 class InterfaceUltraSimple(QtGui.QDialog):
     def __init__(self, chemin_script=None):
         super(InterfaceUltraSimple, self).__init__()
+
+        # Initialiser le gestionnaire de retrofits (si disponible)
+        self.retrofit_manager = None
+        self.selected_retrofits = {}  # {nom_retrofit: bool}
+        self.secondary_params = {}  # Paramètres calculés (anneau, montants, etc.)
+        self.cost_estimate = {}  # Estimation coût
 
         # CHEMIN EXPLICITE - MODIFIEZ ICI !!!
         if chemin_script is None:
@@ -215,6 +245,67 @@ class InterfaceUltraSimple(QtGui.QDialog):
 
         group_params.setLayout(layout_params)
         layout.addWidget(group_params)
+
+        # ============================================
+        # 2.5 PRESETS & OPTIMISATION (if config available)
+        # ============================================
+        if CONFIG_AVAILABLE:
+            group_presets = QtGui.QGroupBox("🎯 Preset & Optimisation")
+            layout_presets = QtGui.QVBoxLayout()
+
+            # Combo preset
+            layout_preset_row = QtGui.QHBoxLayout()
+            layout_preset_row.addWidget(QtGui.QLabel("Sélectionner preset:"))
+            combo_preset = QtGui.QComboBox()
+            combo_preset.addItems(list(PRESETS.keys()))
+            combo_preset.currentIndexChanged.connect(
+                lambda: self._apply_preset(combo_preset.currentText())
+            )
+            self.controles["preset"] = combo_preset
+            layout_preset_row.addWidget(combo_preset)
+            layout_presets.addLayout(layout_preset_row)
+
+            # Paramètres secondaires (affichage)
+            self.label_secondary = QtGui.QLabel(
+                "Paramètres secondaires calculés: [En attente de sélection]"
+            )
+            self.label_secondary.setStyleSheet(
+                "background-color: #ecf0f1; padding: 8px; border-radius: 3px;"
+            )
+            layout_presets.addWidget(self.label_secondary)
+
+            # Estimation coûts
+            self.label_cost = QtGui.QLabel("Estimation coûts: [En attente de calcul]")
+            self.label_cost.setStyleSheet(
+                "background-color: #d5f4e6; padding: 8px; border-radius: 3px;"
+            )
+            layout_presets.addWidget(self.label_cost)
+
+            group_presets.setLayout(layout_presets)
+            layout.addWidget(group_presets)
+
+        # ============================================
+        # 2.6 OPTIONS MODULAIRES (Retrofits)
+        # ============================================
+        if RETROFITS_AVAILABLE:
+            group_retrofits = QtGui.QGroupBox("🔧 Options Modulaires")
+            layout_retrofits = QtGui.QVBoxLayout()
+
+            self.retrofit_checkboxes = {}
+            for retrofit_name, retrofit_info in RETROFIT_OPTIONS.items():
+                checkbox = QtGui.QCheckBox(retrofit_info["label"])
+                checkbox.setToolTip(retrofit_info["description"])
+                self.retrofit_checkboxes[retrofit_name] = checkbox
+                self.selected_retrofits[retrofit_name] = False
+                checkbox.stateChanged.connect(
+                    lambda state, name=retrofit_name: self._update_retrofit_selection(
+                        name, state
+                    )
+                )
+                layout_retrofits.addWidget(checkbox)
+
+            group_retrofits.setLayout(layout_retrofits)
+            layout.addWidget(group_retrofits)
 
         # ============================================
         # 3. BOUTONS DE GÉNÉRATION
@@ -639,6 +730,110 @@ def choisir_script(self):
         except Exception:
             pass
         _append_log(self, f"Chargé: {fichier}")
+
+
+# Attacher les nouvelles méthodes à la classe
+setattr(InterfaceUltraSimple, "_append_log", _append_log)
+setattr(InterfaceUltraSimple, "choisir_script", choisir_script)
+
+
+def _apply_preset(self, preset_name):
+    """Applique un preset (Permanent/Temporaire) et met à jour les paramètres."""
+    if not CONFIG_AVAILABLE or preset_name not in PRESETS:
+        return
+
+    preset = PRESETS[preset_name]
+    try:
+        # Appliquer les paramètres du preset aux contrôles
+        if "material" in self.controles:
+            combo_text = (
+                "Acier galvanisé (permanent)"
+                if "Acier" in preset.get("material", "")
+                else "Bambou (temporaire)"
+            )
+            for i in range(self.controles["material"].count()):
+                if combo_text in self.controles["material"].itemText(i):
+                    self.controles["material"].setCurrentIndex(i)
+                    break
+
+        if "wind_speed" in self.controles:
+            self.controles["wind_speed"].setValue(preset.get("wind", 100))
+
+        if "safety_factor" in self.controles:
+            self.controles["safety_factor"].setValue(preset.get("safety_factor", 1.25))
+
+        # Calculer paramètres secondaires
+        rayon = (
+            int(self.controles.get("rayon").value())
+            if "rayon" in self.controles
+            else 2200
+        )
+        hauteur = (
+            int(self.controles.get("haut").value())
+            if "haut" in self.controles
+            else 2200
+        )
+        espace = (
+            int(self.controles.get("espace").value())
+            if "espace" in self.controles
+            else 1000
+        )
+        hauteur_dome = (
+            int(self.controles.get("hauteur_dome").value())
+            if "hauteur_dome" in self.controles
+            else 3500
+        )
+        wind = self.controles.get("wind_speed").value()
+        material = (
+            self.controles.get("material").currentText()
+            if "material" in self.controles
+            else "Acier"
+        )
+        sf = (
+            self.controles.get("safety_factor").value()
+            if "safety_factor" in self.controles
+            else 1.25
+        )
+
+        # Calcul avec config
+        self.secondary_params = calculate_secondary_params(
+            rayon, hauteur, espace, hauteur_dome, material, wind, sf
+        )
+        self.cost_estimate = estimate_costs(rayon, hauteur, material, "plots", 50)
+
+        # Mettre à jour l'affichage
+        secondary_text = (
+            f"Ø Anneau: {self.secondary_params.get('diametre_anneau_mm')}mm | "
+            f"Montants: {self.secondary_params.get('n_montants')} | "
+            f"Tubes: Ø{self.secondary_params.get('tube_diametre_mm')}mm | "
+            f"Ancrage: {self.secondary_params.get('ancrage_profondeur_mm')}mm"
+        )
+        if hasattr(self, "label_secondary"):
+            self.label_secondary.setText(f"✓ {secondary_text}")
+
+        cost_text = (
+            f"Acier: {self.cost_estimate.get('acier_kg')}kg | "
+            f"Béton: {self.cost_estimate.get('beton_tonnes')}t | "
+            f"Coût estimé: ${self.cost_estimate.get('cout_usd_estime')}"
+        )
+        if hasattr(self, "label_cost"):
+            self.label_cost.setText(f"💰 {cost_text}")
+
+        self._append_log(
+            f"✓ Preset '{preset_name}' appliqué - Params secondaires calculés"
+        )
+
+    except Exception as e:
+        print(f"❌ Erreur apply_preset: {e}")
+        self._append_log(f"❌ Erreur preset: {e}")
+
+
+def _update_retrofit_selection(self, retrofit_name, state):
+    """Enregistre la sélection d'un retrofit."""
+    self.selected_retrofits[retrofit_name] = state != 0
+    retrofit_info = RETROFIT_OPTIONS.get(retrofit_name, {})
+    status = "✓ Ajouté" if state != 0 else "✗ Retiré"
+    self._append_log(f"{status}: {retrofit_info.get('label', retrofit_name)}")
 
 
 # Attacher les nouvelles méthodes à la classe
