@@ -1,16 +1,18 @@
-README — Générateur Kiosque Trèfle (Interface Ultra Simple)
+﻿[![Repo](https://img.shields.io/badge/repo-trefle_kiosque-blue)](https://github.com/biozergy/trefle_kiosque)
 
-Résumé
+README â€” GÃ©nÃ©rateur Kiosque TrÃ¨fle (Interface Ultra Simple)
+
+RÃ©sumÃ©
 ------
-Ce dépôt contient une interface graphique simple (`interface_ultrasimple.py`) qui charge de façon sûre
-le script principal `kiosque_trefle_4petales_dome22.py` et permet de générer le kiosque avec
-paramètres clés (rayon pétales, espacement, hauteur montants, hauteur dôme, matériau, vent, FS).
+Ce dÃ©pÃ´t contient une interface graphique simple (`interface_ultrasimple.py`) qui charge de faÃ§on sÃ»re
+le script principal `kiosque_trefle_4petales_dome22.py` et permet de gÃ©nÃ©rer le kiosque avec
+paramÃ¨tres clÃ©s (rayon pÃ©tales, espacement, hauteur montants, hauteur dÃ´me, matÃ©riau, vent, FS).
 
-Fichiers modifiés/ajoutés
+Fichiers modifiÃ©s/ajoutÃ©s
 -------------------------
-- `interface_ultrasimple.py`  (modifié) — charge sécurisé via `importlib`, introspection, UI étendue
-- `kiosque_trefle_4petales_dome22.py` (inchangé) — script principal contenant la classe `KiosqueTrefleFonctionnel`
-- `README.md` (ajouté)
+- `interface_ultrasimple.py`  (modifiÃ©) â€” charge sÃ©curisÃ© via `importlib`, introspection, UI Ã©tendue
+- `kiosque_trefle_4petales_dome22.py` (inchangÃ©) â€” script principal contenant la classe `KiosqueTrefleFonctionnel`
+- `README.md` (ajoutÃ©)
 
 Lancement (console Python de FreeCAD)
 -------------------------------------
@@ -33,12 +35,12 @@ interface_ultrasimple.trouver_script_manuellement()
 
 Test rapide
 -----------
-- Ouvrir l'interface, régler : `Rayon pétales`, `Espacement`, `Hauteur montants`, `Hauteur Dôme (mm)`, `Matériau`, `Vitesse vent`, `Facteur de sécurité`.
-- Cliquer `🔧 Générer avec paramètres` pour générer via `KiosqueTrefleFonctionnel` si disponible.
-- Utiliser `💡 Conseil dimensionnement` pour une recommandation heuristique.
-- Vérifiez la console FreeCAD pour messages d'erreur/confirmation.
+- Ouvrir l'interface, rÃ©gler : `Rayon pÃ©tales`, `Espacement`, `Hauteur montants`, `Hauteur DÃ´me (mm)`, `MatÃ©riau`, `Vitesse vent`, `Facteur de sÃ©curitÃ©`.
+- Cliquer `ðŸ”§ GÃ©nÃ©rer avec paramÃ¨tres` pour gÃ©nÃ©rer via `KiosqueTrefleFonctionnel` si disponible.
+- Utiliser `ðŸ’¡ Conseil dimensionnement` pour une recommandation heuristique.
+- VÃ©rifiez la console FreeCAD pour messages d'erreur/confirmation.
 
-Commit Git (exécuter dans PowerShell à la racine du projet)
+Commit Git (exÃ©cuter dans PowerShell Ã  la racine du projet)
 ---------------------------------------------------------
 ```powershell
 cd "C:\Users\martin-cochera\Documents\TREFLE_PROJECT\SCRIPTS_PARAMETRIQUES"
@@ -47,14 +49,14 @@ git add interface_ultrasimple.py README.md
 git commit -m "Add safe loader, UI introspection, dome height control and README"
 ```
 
-Notes & prochaines améliorations possibles
+Notes & prochaines amÃ©liorations possibles
 -----------------------------------------
-- Générer automatiquement des champs UI pour les paramètres de fonctions via `inspect.signature`.
-- Exécuter la génération dans un subprocess pour isoler FreeCAD des erreurs de script.
-- Ajouter sauvegarde des paramètres (profil), export PDF des recommandations, et tests unitaires.
+- GÃ©nÃ©rer automatiquement des champs UI pour les paramÃ¨tres de fonctions via `inspect.signature`.
+- ExÃ©cuter la gÃ©nÃ©ration dans un subprocess pour isoler FreeCAD des erreurs de script.
+- Ajouter sauvegarde des paramÃ¨tres (profil), export PDF des recommandations, et tests unitaires.
 
 Si vous voulez, je peux :
-- créer le commit pour vous (si vous m'autorisez à exécuter des commandes git ici),
+- crÃ©er le commit pour vous (si vous m'autorisez Ã  exÃ©cuter des commandes git ici),
 - ajouter un petit script de tests.
 
 Fin du README

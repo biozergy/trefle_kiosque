@@ -1,0 +1,33 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+# Editor/IDE
+.vscode/
+.idea/
+*.sublime-workspace
+# OS files
+.DS_Store
+Thumbs.db
+# Virtual envs
+venv/
+env/
+.venv/
+# Build
+build/
+dist/
+*.egg-info/
+# FreeCAD
+*.FCStd
+*.FCStd1
+*.FreeCAD*
+# Temporary
+*.tmp
+*.bak
+# compiled
+*.so
+
