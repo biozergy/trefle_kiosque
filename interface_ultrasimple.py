@@ -20,9 +20,13 @@ class InterfaceUltraSimple(QtGui.QDialog):
 
         # CHEMIN EXPLICITE - MODIFIEZ ICI !!!
         if chemin_script is None:
-            # ⚡⚡⚡ METTEZ VOTRE VRAI CHEMIN ICI ! ⚡⚡⚡
-            self.chemin_script = r"C:\path\to\kiosque_trefle_4petales_dome22.py"
-            # OU: r"C:\Users\John\Desktop\SCRIPTS_PARAMETRIQUES\kiosque_trefle_4petales_dome22.py"
+            # Essayer de détecter automatiquement dans le répertoire courant
+            auto_path = os.path.join(os.getcwd(), "kiosque_trefle_4petales_dome22.py")
+            if os.path.exists(auto_path):
+                self.chemin_script = auto_path
+            else:
+                # Fallback: chemin par défaut (à modifier)
+                self.chemin_script = r"C:\path\to\kiosque_trefle_4petales_dome22.py"
         else:
             self.chemin_script = chemin_script
 
@@ -76,10 +80,18 @@ class InterfaceUltraSimple(QtGui.QDialog):
                 return []
 
             # Récupérer les fonctions définies DANS le module
+            # Exclure les helpers attachés à InterfaceUltraSimple
+            excluded = {
+                "generer_avec_parametres",
+                "montrer_conseil",
+                "choisir_script",
+                "_append_log",
+            }
             fonctions_trouvees = [
                 name
                 for name, obj in inspect.getmembers(module, inspect.isfunction)
                 if getattr(obj, "__module__", "") == module.__name__
+                and name not in excluded
             ]
             print(f"📋 Fonctions trouvées dans le module: {len(fonctions_trouvees)}")
 
@@ -228,18 +240,24 @@ class InterfaceUltraSimple(QtGui.QDialog):
         """
         )
         self.btn_magique.clicked.connect(self.generer_magique)
+        self.btn_magique.setEnabled(
+            bool(self.fonctions_chargees)
+        )  # Enable if functions loaded
         layout_actions.addWidget(self.btn_magique)
 
         # Boutons spécifiques
         frame_boutons = QtGui.QFrame()
         layout_boutons_spec = QtGui.QHBoxLayout()
+        layout_boutons_spec.setSpacing(10)  # Add spacing between buttons
 
         self.btn_standard = QtGui.QPushButton("🏗️ Standard")
+        self.btn_standard.setMinimumHeight(40)  # Ensure readable button height
         self.btn_standard.clicked.connect(self.generer_standard)
         self.btn_standard.setEnabled(bool(self.fonctions_chargees))
         layout_boutons_spec.addWidget(self.btn_standard)
 
         self.btn_plots = QtGui.QPushButton("🏗️ Avec Plots")
+        self.btn_plots.setMinimumHeight(40)  # Ensure readable button height
         self.btn_plots.clicked.connect(self.generer_plots)
         self.btn_plots.setEnabled(bool(self.fonctions_chargees))
         layout_boutons_spec.addWidget(self.btn_plots)
@@ -615,6 +633,9 @@ def choisir_script(self):
         try:
             self.btn_standard.setEnabled(bool(self.fonctions_chargees))
             self.btn_plots.setEnabled(bool(self.fonctions_chargees))
+            self.btn_magique.setEnabled(
+                bool(self.fonctions_chargees)
+            )  # Enable magique button
         except Exception:
             pass
         _append_log(self, f"Chargé: {fichier}")
