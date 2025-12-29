@@ -1,4 +1,40 @@
-﻿[![Repo](https://img.shields.io/badge/repo-trefle_kiosque-blue)](https://github.com/biozergy/trefle_kiosque)
+﻿# Générateur Kiosque - Instructions
+
+Résumé rapide
+- Interface graphique légère pour charger et exécuter le script `kiosque_trefle_4petales_dome22.py`.
+
+Prérequis
+- Python 3.x (pour les tests et pre-commit)
+- FreeCAD (si vous voulez exécuter l'interface et générer la géométrie)
+
+Installation des outils de développement
+```powershell
+python -m pip install --user pre-commit pytest
+python -m pip install -r requirements.txt  # installe pytest si besoin
+```
+
+Activer les hooks `pre-commit`
+```powershell
+python -m pre_commit install
+pre-commit run --all-files
+```
+
+Exécuter les tests locaux
+```powershell
+python -m pytest -q
+```
+
+Utilisation de l'interface (FreeCAD)
+- Ouvrez FreeCAD, puis exécutez `interface_ultrasimple.py` depuis l'éditeur ou `python` intégré à FreeCAD.
+- Modifiez la variable `chemin_script` dans `interface_ultrasimple.py` ou utilisez le bouton `📂 Choisir un script .py`.
+
+Notes
+- Les hooks préconfigurés exécutent `black`, `isort`, `flake8` et un test smoke `pytest` avant commit.
+- Le workflow CI lance `pytest` sur GitHub Actions lors des push/PR.
+
+Contact
+- Si vous voulez que j'ajoute un README plus détaillé (exemples, capture d'écran, ou étapes FreeCAD), dites-le.
+[![Repo](https://img.shields.io/badge/repo-trefle_kiosque-blue)](https://github.com/biozergy/trefle_kiosque)
 
 README â€” GÃ©nÃ©rateur Kiosque TrÃ¨fle (Interface Ultra Simple)
 
